@@ -1,46 +1,38 @@
 import os, json, logging
 from pprint import pprint
 
-from dotenv import load_dotenv
-import requests
+import dotenv, requests
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-load_dotenv()
-BASE_URL = "https://vrmapi.victronenergy.com/v2/"
+from config import BASE_URL
 
 
-class TokenManager:
+class VRMClient:
     def __init__(self):
-        try:
-            username, password = os.environ["VRM_USERNAME"], os.environ["VRM_PASSWORD"]
-        except KeyError:
-            logging.critical(
-                "Please create a .env file in this directory and supply VRM_USERNAME and VRM_PASSWORD. Exiting..."
-            )
-            exit()
-
         self.session = requests.Session()
-        req = self.session.post(
-            os.path.join(BASE_URL, "auth", "login"),
-            data=json.dumps({"username": username, "password": password}),
+        if not os.environ.get("VRM_TOKEN"):
+            logging.info("No access token found, generating one")
+            self.generate_token("Emilio Ziniades")
+
+        dotenv.load_dotenv()
+
+        if not os.environ.get("VRM_USER_ID"):
+            logging.info("No user ID found, logging in")
+            self.login()
+
+        dotenv.load_dotenv()
+
+        self.user_id = os.environ["VRM_USER_ID"]
+        self.session.headers.update(
+            {"X-Authorization": f"Token {os.environ.get('VRM_TOKEN')}"}
         )
-        resp = json.loads(req.text)
-
-        if req.status_code is requests.codes.ok:
-            logging.info("login successful")
-        else:
-            logging.critical(f"login failed, exiting... {req.text}")
-            exit()
-
-        self.user_id = str(resp["idUser"])
-        self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
     def generate_token(self, token_name: str) -> None:
         """
         Fetches and saves access token and token ID to .env
         """
 
-        # generate access token and save to .env
+        self.login()
+
         req = self.session.post(
             os.path.join(BASE_URL, "users", self.user_id, "accesstokens", "create"),
             data=json.dumps({"name": token_name}),
@@ -56,6 +48,32 @@ class TokenManager:
         with open(".env", "a") as f:
             f.write(f"VRM_TOKEN={resp.get('token')}\n")
             f.write(f"VRM_TOKEN_ID={resp.get('idAccessToken')}\n")
+
+    def login(self) -> None:
+        try:
+            username, password = os.environ["VRM_USERNAME"], os.environ["VRM_PASSWORD"]
+        except KeyError:
+            logging.critical(
+                "Please create a .env file in this directory and supply VRM_USERNAME and VRM_PASSWORD. Exiting..."
+            )
+            exit()
+
+        req = self.session.post(
+            os.path.join(BASE_URL, "auth", "login"),
+            data=json.dumps({"username": username, "password": password}),
+        )
+        resp = json.loads(req.text)
+
+        if req.status_code is requests.codes.ok:
+            logging.info("login successful")
+        else:
+            logging.critical(f"login failed, exiting... {req.text}")
+            exit()
+
+        with open(".env", "a") as f:
+            f.write(f"VRM_USER_ID={resp.get('idUser')}\n")
+
+        self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
     def list_tokens(self) -> None:
         """
@@ -85,15 +103,3 @@ class TokenManager:
             logging.info("token revocation successful")
         else:
             logging.error(f"token revocation failed {req.text}")
-
-
-def main() -> None:
-
-    tm = TokenManager()
-    tm.list_tokens()
-    # tm.generate_token("Emilio Ziniades")
-    # tm.list_tokens()
-
-
-if __name__ == "__main__":
-    main()
