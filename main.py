@@ -1,5 +1,5 @@
-import logging
-import pprint
+import logging, os
+from pprint import pprint
 
 import dotenv
 
@@ -9,18 +9,20 @@ from config import BASE_URL
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    logging.info("starting...")
     dotenv.load_dotenv()
 
-    logging.info("starting...")
-
     vrm = vrm_client.VRMClient()
-    vrm.list_tokens()
 
-    # req = vrm.session.get(
-    #     os.path.join(BASE_URL, "users", vrm.user_id, "installations"),
-    # )
-    # print(req.status_code)
-    # pprint.pprint(req.json())
+    req = vrm.session.get(
+        os.path.join(BASE_URL, "users", vrm.user_id, "installations"),
+    )
+
+    req = vrm.session.get(
+        os.path.join(BASE_URL, "users", vrm.user_id, "system-overview"),
+    )
+    data = req.json()
+    pprint(data)
 
 
 if __name__ == "__main__":

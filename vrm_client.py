@@ -1,40 +1,47 @@
-import os, json, logging
+"""
+Client to interact with VRM API. VRMClient handles login, access tokens, and requests.
+
+"""
+import json, logging
+from os import environ, path
 from pprint import pprint
 
 import dotenv, requests
 
-from config import BASE_URL
+from config import BASE_URL, TOKEN_NAME
 
 
 class VRMClient:
+    """
+    VRMClient to handle connection to VRM API
+    """
+
     def __init__(self):
         self.session = requests.Session()
-        if not os.environ.get("VRM_TOKEN"):
+
+        if not "VRM_TOKEN" in environ:
             logging.info("No access token found, generating one")
-            self.generate_token("Emilio Ziniades")
+            self._generate_token(TOKEN_NAME)
+        else:
+            logging.info("Found access token")
 
-        dotenv.load_dotenv()
-
-        if not os.environ.get("VRM_USER_ID"):
-            logging.info("No user ID found, logging in")
-            self.login()
-
-        dotenv.load_dotenv()
-
-        self.user_id = os.environ["VRM_USER_ID"]
         self.session.headers.update(
-            {"X-Authorization": f"Token {os.environ.get('VRM_TOKEN')}"}
+            {"X-Authorization": f"Token {environ.get('VRM_TOKEN')}"}
         )
 
-    def generate_token(self, token_name: str) -> None:
-        """
-        Fetches and saves access token and token ID to .env
-        """
+        if not "VRM_USER_ID" in environ:
+            logging.info("No user ID found, logging in")
+            self._login()
 
-        self.login()
+        self.user_id = environ["VRM_USER_ID"]
+
+    def _generate_token(self, token_name: str) -> None:
+        # Fetches and saves access token and token ID to .env
+
+        self._login()
 
         req = self.session.post(
-            os.path.join(BASE_URL, "users", self.user_id, "accesstokens", "create"),
+            path.join(BASE_URL, "users", self.user_id, "accesstokens", "create"),
             data=json.dumps({"name": token_name}),
         )
         resp = json.loads(req.text)
@@ -48,10 +55,12 @@ class VRMClient:
         with open(".env", "a") as f:
             f.write(f"VRM_TOKEN={resp.get('token')}\n")
             f.write(f"VRM_TOKEN_ID={resp.get('idAccessToken')}\n")
+        dotenv.load_dotenv()
 
-    def login(self) -> None:
+    def _login(self) -> None:
+        # Logs into VRM API with username and password
         try:
-            username, password = os.environ["VRM_USERNAME"], os.environ["VRM_PASSWORD"]
+            username, password = environ["VRM_USERNAME"], environ["VRM_PASSWORD"]
         except KeyError:
             logging.critical(
                 "Please create a .env file in this directory and supply VRM_USERNAME and VRM_PASSWORD. Exiting..."
@@ -59,7 +68,7 @@ class VRMClient:
             exit()
 
         req = self.session.post(
-            os.path.join(BASE_URL, "auth", "login"),
+            path.join(BASE_URL, "auth", "login"),
             data=json.dumps({"username": username, "password": password}),
         )
         resp = json.loads(req.text)
@@ -72,16 +81,13 @@ class VRMClient:
 
         with open(".env", "a") as f:
             f.write(f"VRM_USER_ID={resp.get('idUser')}\n")
+        dotenv.load_dotenv()
 
         self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
     def list_tokens(self) -> None:
-        """
-        Lists all active access tokens
-        """
-
         req = self.session.get(
-            os.path.join(BASE_URL, "users", self.user_id, "accesstokens", "list"),
+            path.join(BASE_URL, "users", self.user_id, "accesstokens", "list"),
         )
 
         if req.status_code is requests.codes.ok:
@@ -92,10 +98,8 @@ class VRMClient:
         pprint(req.json()["tokens"])
 
     def revoke_token(self, token_id: str) -> None:
-        """Revokes stipulated access token"""
-
         req = self.session.get(
-            os.path.join(
+            path.join(
                 BASE_URL, "users", self.user_id, "accesstokens", token_id, "revoke"
             ),
         )
@@ -103,3 +107,6 @@ class VRMClient:
             logging.info("token revocation successful")
         else:
             logging.error(f"token revocation failed {req.text}")
+
+    def get_installations(self):
+        pass
