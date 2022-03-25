@@ -1,2 +1,6 @@
-BASE_URL = "https://vrmapi.victronenergy.com/v2/"
 TOKEN_NAME = "Emilio Ziniades"
+BASE_URL = "https://vrmapi.victronenergy.com/v2/"
+LOGIN_URL = BASE_URL + "auth/login"
+TOKEN_URL = BASE_URL + "users/{user_id}/accesstokens/create"
+TOKEN_REVOKE_URL = BASE_URL + "users/{user_id}/accesstokens/{token_id}/revoke"
+TOKEN_LIST_URL = BASE_URL + "/users/{user_id}/accesstokens/list"

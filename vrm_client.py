@@ -3,12 +3,12 @@ Client to interact with VRM API. VRMClient handles login, access tokens, and req
 
 """
 import json, logging
-from os import environ, path
+from os import environ
 from pprint import pprint
 
 import dotenv, requests
 
-from config import BASE_URL, TOKEN_NAME
+from config import TOKEN_NAME, TOKEN_URL, LOGIN_URL, TOKEN_REVOKE_URL, TOKEN_LIST_URL
 
 
 class VRMClient:
@@ -40,10 +40,8 @@ class VRMClient:
 
         self._login()
 
-        req = self.session.post(
-            path.join(BASE_URL, "users", self.user_id, "accesstokens", "create"),
-            data=json.dumps({"name": token_name}),
-        )
+        data = json.dumps({"name": token_name})
+        req = self.session.post(TOKEN_URL.format(self.user_id), data=data)
         resp = json.loads(req.text)
 
         if req.status_code is requests.codes.ok and resp["success"]:
@@ -67,10 +65,8 @@ class VRMClient:
             )
             exit()
 
-        req = self.session.post(
-            path.join(BASE_URL, "auth", "login"),
-            data=json.dumps({"username": username, "password": password}),
-        )
+        data = json.dumps({"username": username, "password": password})
+        req = self.session.post(LOGIN_URL, data=data)
         resp = json.loads(req.text)
 
         if req.status_code is requests.codes.ok:
@@ -86,9 +82,7 @@ class VRMClient:
         self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
     def list_tokens(self) -> None:
-        req = self.session.get(
-            path.join(BASE_URL, "users", self.user_id, "accesstokens", "list"),
-        )
+        req = self.session.get(TOKEN_LIST_URL.format(self.user_id))
 
         if req.status_code is requests.codes.ok:
             logging.info("listing access tokens successful")
@@ -98,11 +92,7 @@ class VRMClient:
         pprint(req.json()["tokens"])
 
     def revoke_token(self, token_id: str) -> None:
-        req = self.session.get(
-            path.join(
-                BASE_URL, "users", self.user_id, "accesstokens", token_id, "revoke"
-            ),
-        )
+        req = self.session.get(TOKEN_REVOKE_URL.format(self.user_id, token_id))
         if req.status_code is requests.codes.ok:
             logging.info("token revocation successful")
         else:
