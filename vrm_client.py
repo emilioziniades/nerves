@@ -12,12 +12,13 @@ import dotenv, requests
 
 from config import (
     TOKEN_NAME,
-    TOKEN_URL,
-    LOGIN_URL,
-    TOKEN_REVOKE_URL,
-    TOKEN_LIST_URL,
-    INSTALLATIONS_URL,
-    STATS_URL,
+    TOKEN_ENDPOINT,
+    AUTH_ENDPOINT,
+    TOKEN_REVOKE_ENDPOINT,
+    TOKEN_LIST_ENDPOINT,
+    INSTALLATIONS_ENDPOINT,
+    STATS_ENDPOINT,
+    WIDGET_ENDPOINT,
 )
 
 
@@ -51,7 +52,7 @@ class VRMClient:
         self._login()
 
         data = json.dumps({"name": token_name})
-        req = self.session.post(TOKEN_URL.format(self.user_id), data=data)
+        req = self.session.post(TOKEN_ENDPOINT.format(self.user_id), data=data)
         check_ok(req, "generate access token", should_exit=True)
 
         resp = req.json()
@@ -71,7 +72,7 @@ class VRMClient:
             exit()
 
         data = json.dumps({"username": username, "password": password})
-        req = self.session.post(LOGIN_URL, data=data)
+        req = self.session.post(AUTH_ENDPOINT, data=data)
         check_ok(req, "login", should_exit=True)
         resp = req.json()
 
@@ -82,18 +83,18 @@ class VRMClient:
         self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
     def list_tokens(self) -> Dict:
-        url = TOKEN_LIST_URL.format(user_id=self.user_id)
+        url = TOKEN_LIST_ENDPOINT.format(user_id=self.user_id)
         req = self.session.get(url)
         check_ok(req, "listing access tokens")
         return req.json()["tokens"]
 
     def revoke_token(self, token_id: str) -> None:
-        url = TOKEN_REVOKE_URL.format(user_id=self.user_id, token_id=token_id)
+        url = TOKEN_REVOKE_ENDPOINT.format(user_id=self.user_id, token_id=token_id)
         req = self.session.get(url)
         check_ok(req, "token revocation")
 
     def get_installations(self) -> Dict[str, str]:
-        url = INSTALLATIONS_URL.format(user_id=self.user_id)
+        url = INSTALLATIONS_ENDPOINT.format(user_id=self.user_id)
         req = self.session.get(url)
         check_ok(req, "fetch installations")
         resp = req.json()
