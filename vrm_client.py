@@ -5,10 +5,20 @@ Client to interact with VRM API. VRMClient handles login, access tokens, and req
 import json, logging
 from os import environ
 from pprint import pprint
+from typing import Dict
+from datetime import datetime, timedelta
 
 import dotenv, requests
 
-from config import TOKEN_NAME, TOKEN_URL, LOGIN_URL, TOKEN_REVOKE_URL, TOKEN_LIST_URL
+from config import (
+    TOKEN_NAME,
+    TOKEN_URL,
+    LOGIN_URL,
+    TOKEN_REVOKE_URL,
+    TOKEN_LIST_URL,
+    INSTALLATIONS_URL,
+    STATS_URL,
+)
 
 
 class VRMClient:
@@ -42,14 +52,9 @@ class VRMClient:
 
         data = json.dumps({"name": token_name})
         req = self.session.post(TOKEN_URL.format(self.user_id), data=data)
-        resp = json.loads(req.text)
+        check_ok(req, "generate access token", should_exit=True)
 
-        if req.status_code is requests.codes.ok and resp["success"]:
-            logging.info("generate access token success")
-        else:
-            logging.critical(f"generate access token failed, exiting ... {req.text}")
-            exit()
-
+        resp = req.json()
         with open(".env", "a") as f:
             f.write(f"VRM_TOKEN={resp.get('token')}\n")
             f.write(f"VRM_TOKEN_ID={resp.get('idAccessToken')}\n")
@@ -67,13 +72,8 @@ class VRMClient:
 
         data = json.dumps({"username": username, "password": password})
         req = self.session.post(LOGIN_URL, data=data)
-        resp = json.loads(req.text)
-
-        if req.status_code is requests.codes.ok:
-            logging.info("login successful")
-        else:
-            logging.critical(f"login failed, exiting... {req.text}")
-            exit()
+        check_ok(req, "login", should_exit=True)
+        resp = req.json()
 
         with open(".env", "a") as f:
             f.write(f"VRM_USER_ID={resp.get('idUser')}\n")
@@ -81,22 +81,60 @@ class VRMClient:
 
         self.session.headers.update({"X-Authorization": f"Bearer {resp.get('token')}"})
 
-    def list_tokens(self) -> None:
-        req = self.session.get(TOKEN_LIST_URL.format(self.user_id))
-
-        if req.status_code is requests.codes.ok:
-            logging.info("listing access tokens successful")
-        else:
-            logging.error(f"listing access tokens failed... {req.text}")
-
-        pprint(req.json()["tokens"])
+    def list_tokens(self) -> Dict:
+        url = TOKEN_LIST_URL.format(user_id=self.user_id)
+        req = self.session.get(url)
+        check_ok(req, "listing access tokens")
+        return req.json()["tokens"]
 
     def revoke_token(self, token_id: str) -> None:
-        req = self.session.get(TOKEN_REVOKE_URL.format(self.user_id, token_id))
-        if req.status_code is requests.codes.ok:
-            logging.info("token revocation successful")
-        else:
-            logging.error(f"token revocation failed {req.text}")
+        url = TOKEN_REVOKE_URL.format(user_id=self.user_id, token_id=token_id)
+        req = self.session.get(url)
+        check_ok(req, "token revocation")
 
-    def get_installations(self):
-        pass
+    def get_installations(self) -> Dict[str, str]:
+        url = INSTALLATIONS_URL.format(user_id=self.user_id)
+        req = self.session.get(url)
+        check_ok(req, "fetch installations")
+        resp = req.json()
+        return {i["name"]: str(i["idSite"]) for i in resp["records"]}
+
+    def get_readings(self, diff: int, site: str, round: bool = False) -> Dict:
+        now = datetime.now()
+        prev = now - timedelta(hours=diff)
+        if round:
+            now = round_hours(now)
+            prev = round_hours(prev)
+        start = int(prev.timestamp())
+        end = int(now.timestamp())
+
+        payload = {
+            "type": "kwh",
+            "start": str(start),
+            "end": str(end),
+            "interval": "hours",
+        }
+
+        sites = self.get_installations()
+        site_id = sites[site]
+        req = self.session.get(STATS_URL.format(site_id=site_id), params=payload)
+        check_ok(req, "fetch readings")
+        resp = req.json()
+
+        return resp
+
+
+def check_ok(r: requests.Response, action: str, should_exit: bool = False) -> None:
+    response = r.json()
+    if r.status_code is requests.codes.ok and response["success"]:
+        logging.info(f"{action} successful")
+    else:
+        if should_exit:
+            logging.critical(f"{action} failed, exiting ... {response}")
+            exit(1)
+        else:
+            logging.error(f"{action} failed ... {response}")
+
+
+def round_hours(t: datetime) -> datetime:
+    return t.replace(microsecond=0, second=0, minute=0)

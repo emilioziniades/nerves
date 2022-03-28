@@ -1,10 +1,10 @@
-import logging, os
+import logging
 from pprint import pprint
+from datetime import datetime
 
 import dotenv
 
 import vrm_client
-from config import BASE_URL
 
 
 def main():
@@ -14,15 +14,13 @@ def main():
 
     vrm = vrm_client.VRMClient()
 
-    req = vrm.session.get(
-        os.path.join(BASE_URL, "users", vrm.user_id, "installations"),
-    )
-
-    req = vrm.session.get(
-        os.path.join(BASE_URL, "users", vrm.user_id, "system-overview"),
-    )
-    data = req.json()
+    data = vrm.get_readings(diff=24, site="Longmarket")
     pprint(data)
+    pc = data["records"]["kwh"]
+    for i in pc:
+        curr = i[0] / 1000
+        # print(i[0])
+        print(i[0], datetime.fromtimestamp(curr))
 
 
 if __name__ == "__main__":
