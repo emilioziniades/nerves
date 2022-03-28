@@ -13,14 +13,15 @@ def main():
     dotenv.load_dotenv()
 
     vrm = vrm_client.VRMClient()
-
-    data = vrm.get_readings(diff=24, site="Longmarket")
+    lm_id = vrm.lookup_site("Longmarket")
+    readings = ["dpE", "dYU"]
+    data = vrm.get_custom_stats(diff=24, site_id=lm_id, readings=readings, round=True)
     pprint(data)
-    pc = data["records"]["kwh"]
-    for i in pc:
-        curr = i[0] / 1000
-        # print(i[0])
-        print(i[0], datetime.fromtimestamp(curr))
+
+    for k, v in data["records"].items():
+        print(k)
+        for i in v:
+            print(i[0], datetime.fromtimestamp(i[0] / 1000), i[1])
 
 
 if __name__ == "__main__":

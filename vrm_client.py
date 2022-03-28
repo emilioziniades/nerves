@@ -5,7 +5,7 @@ Client to interact with VRM API. VRMClient handles login, access tokens, and req
 import json, logging
 from os import environ
 from pprint import pprint
-from typing import Dict
+from typing import Dict, Tuple, List
 from datetime import datetime, timedelta
 
 import dotenv, requests
@@ -93,6 +93,16 @@ class VRMClient:
         req = self.session.get(url)
         check_ok(req, "token revocation")
 
+    def lookup_site(self, site_name: str) -> str:
+        sites = self.get_installations()
+        site_names = [i for i in sites.keys()]
+        try:
+            site_id = sites[site_name]
+            return site_id
+        except KeyError:
+            logging.error(f"site '{site_name}' not found. Sites include: {site_names} ")
+            return ""
+
     def get_installations(self) -> Dict[str, str]:
         url = INSTALLATIONS_ENDPOINT.format(user_id=self.user_id)
         req = self.session.get(url)
@@ -100,32 +110,45 @@ class VRMClient:
         resp = req.json()
         return {i["name"]: str(i["idSite"]) for i in resp["records"]}
 
-    def get_readings(self, diff: int, site: str, round: bool = False) -> Dict:
-        now = datetime.now()
-        prev = now - timedelta(hours=diff)
-        if round:
-            now = round_hours(now)
-            prev = round_hours(prev)
-        start = int(prev.timestamp())
-        end = int(now.timestamp())
+    def get_kwh_stats(self, diff: int, site_id: str) -> Dict:
+
+        start, end = timestamps_until_now(diff, round=False)
 
         payload = {
             "type": "kwh",
-            "start": str(start),
-            "end": str(end),
+            "start": start,
+            "end": end,
             "interval": "hours",
         }
 
-        sites = self.get_installations()
-        site_id = sites[site]
-        req = self.session.get(STATS_URL.format(site_id=site_id), params=payload)
-        check_ok(req, "fetch readings")
+        req = self.session.get(STATS_ENDPOINT.format(site_id=site_id), params=payload)
+        check_ok(req, "fetch kwh readings")
+        resp = req.json()
+
+        return resp
+
+    def get_custom_stats(
+        self, diff: int, site_id: str, readings: List[str], round: bool = False
+    ) -> Dict:
+        start, end = timestamps_until_now(diff, round=round)
+
+        payload = {
+            "type": "custom",
+            "start": start,
+            "end": end,
+            "interval": "hours",
+            "attributeCodes[]": readings,
+        }
+
+        req = self.session.get(STATS_ENDPOINT.format(site_id=site_id), params=payload)
+        check_ok(req, "fetch custom readings")
         resp = req.json()
 
         return resp
 
 
 def check_ok(r: requests.Response, action: str, should_exit: bool = False) -> None:
+    # verifies status code of http request, and logs result
     response = r.json()
     if r.status_code is requests.codes.ok and response["success"]:
         logging.info(f"{action} successful")
@@ -138,4 +161,18 @@ def check_ok(r: requests.Response, action: str, should_exit: bool = False) -> No
 
 
 def round_hours(t: datetime) -> datetime:
+    # rounds down to the nearest hour
     return t.replace(microsecond=0, second=0, minute=0)
+
+
+def timestamps_until_now(diff: int, round: bool = False) -> Tuple[str, str]:
+    # returns timestamps (start, end) where end is now, and start is diff hours in the past
+    now = datetime.now()
+    prev = now - timedelta(hours=diff)
+    if round:
+        now = round_hours(now)
+        prev = round_hours(prev)
+    start = int(prev.timestamp())
+    end = int(now.timestamp())
+
+    return str(start), str(end)
